@@ -13,7 +13,7 @@ class CustomTokenSerializer(TokenSerializer):
     def get_user(self, obj):
         user = obj.user
         user_data = {
-            "id": user.id,
+            "u_id": user.id,
             "username": user.username,
             "email": user.email,
         }
@@ -21,6 +21,7 @@ class CustomTokenSerializer(TokenSerializer):
         # Check if the user has a Profile or Driver model and include relevant data
         if hasattr(user, 'profile'):
             user_data.update({
+                "profile_id":user.profile.id,
                 "role": user.profile.role,
                 "contact_number": user.profile.contact_number,
                 "address": user.profile.address,
@@ -29,6 +30,7 @@ class CustomTokenSerializer(TokenSerializer):
         elif hasattr(user, 'drivers'):
             driver = user.drivers
             user_data.update({
+                "driver_id":driver.id,
                 "role": "driver",
                 "first_name": driver.first_name,
                 "last_name": driver.last_name,
