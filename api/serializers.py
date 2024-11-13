@@ -1,6 +1,6 @@
 # serializers.py
 from rest_framework import serializers
-from .models import Product, Warehouse, Store, Driver, Pickup, Return
+from .models import *
 from djoser.serializers import UserSerializer as DjoserUserSerializer
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -26,6 +26,11 @@ class DriverSerializer(serializers.ModelSerializer):
 class PickupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pickup
+        fields = '__all__'
+
+class DropOffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DropOff
         fields = '__all__'
 
 class ReturnSerializer(serializers.ModelSerializer):

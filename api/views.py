@@ -7,16 +7,123 @@ import pandas as pd
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view,permission_classes
+from django_filters.rest_framework import DjangoFilterBackend 
+from rest_framework import filters
+from django.http import JsonResponse
+from rest_framework.decorators import api_view
+import requests
+
+
+apiUrl =  "http://localhost:8000/api"
 
 class ProductListCreateView(generics.ListCreateAPIView):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     permission_classes = [AllowAny]  # Allow access to all users
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]
+    filterset_fields = "__all__"
+    search_fields = ['box_code'] 
 
 class ProductRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     permission_classes = [AllowAny]  # Allow access to all users
+
+
+class WarehouseListCreateView(generics.ListCreateAPIView):
+    queryset = Warehouse.objects.all()
+    serializer_class = WarehouseSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]
+    filterset_fields = "__all__"
+
+class WarehouseRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Warehouse.objects.all()
+    serializer_class = WarehouseSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+
+class StoreListCreateView(generics.ListCreateAPIView):
+    queryset = Store.objects.all()
+    serializer_class = StoreSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]
+    filterset_fields = ['id', 'created_at', 'name', 'vat_no', 'cr_no', 'location', 'latitude', 'longitude', 'point_of_contact', 'whatsapp_number', 'email']  # Excludes qr_code_image
+
+class StoreRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Store.objects.all()
+    serializer_class = StoreSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+    filterset_fields = '__all__'  # Allow filtering on all fields
+
+class DriverListCreateView(generics.ListCreateAPIView):
+    queryset = Driver.objects.all()
+    serializer_class = DriverSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]
+    filterset_fields = ["user","driving_license_expiry_date","iqama_expiry_date","nationality","iqama_number","contact_number","last_name","first_name","created_at","id"]
+    
+ 
+
+class DriverRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Driver.objects.all()
+    serializer_class = DriverSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+
+
+class PickupListCreateView(generics.ListCreateAPIView):
+    queryset = Pickup.objects.all()
+    serializer_class = PickupSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]
+    filterset_fields = "__all__"
+
+class PickupRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Pickup.objects.all()
+    serializer_class = PickupSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+
+class DropoffListCreateView(generics.ListCreateAPIView):
+    queryset = DropOff.objects.all()
+    serializer_class = DropOffSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]
+    filterset_fields = "__all__"
+
+class DropoffRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = DropOff.objects.all()
+    serializer_class = DropOffSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+
+
+class ReturnListCreateView(generics.ListCreateAPIView):
+    queryset = Return.objects.all()
+    serializer_class = ReturnSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]
+    filterset_fields = "__all__"
+
+class ReturnRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Return.objects.all()
+    serializer_class = ReturnSerializer
+    permission_classes = [AllowAny]  # Allow access to all users
+
+
+# ------------------------------------------ SPECIFIC TASK URLS ------------------------------------------ 
+
+# ------------------------------------------ STORE QR DOWNLOAD ------------------------------------------ 
+
+def download_qr_code(request, store_id):
+    try:
+        store = Store.objects.get(id=store_id)
+        response = HttpResponse(store.qr_code_image, content_type='image/png')
+        response['Content-Disposition'] = f'attachment; filename="{store.name}_qr_code.png"'
+        return response
+    except Store.DoesNotExist:
+        return HttpResponse(status=404)
+    
+
+# ------------------------------------------ PRODUCT BUL UPLOAD & TEMPLATE ------------------------------------------ 
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -66,62 +173,441 @@ def download_template(request):
     df.to_excel(response, index=False, engine='openpyxl')
     return response
 
+# ------------------------------------------ ASSIGN PICKUP  ------------------------------------------ 
 
-class WarehouseListCreateView(generics.ListCreateAPIView):
-    queryset = Warehouse.objects.all()
-    serializer_class = WarehouseSerializer
-    permission_classes = [AllowAny]  # Allow access to all users
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_pickup(request):
+    driver_id = request.data.get('driver_id')
+    items = request.data.get('items')  # This should be a list of strings
+    item_type = request.data.get('item_type')  # 'product' or 'box'
+    warehouse_id = request.data.get('warehouse_id')
 
-class WarehouseRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Warehouse.objects.all()
-    serializer_class = WarehouseSerializer
-    permission_classes = [AllowAny]  # Allow access to all users
+    if not driver_id:
+        return JsonResponse({'error': 'Driver ID is required.'}, status=400)
 
-class StoreListCreateView(generics.ListCreateAPIView):
-    queryset = Store.objects.all()
-    serializer_class = StoreSerializer
-    permission_classes = [AllowAny]  # Allow access to all users
+    if not items:
+        return JsonResponse({'error': 'Items are required.'}, status=400)
 
-class StoreRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Store.objects.all()
-    serializer_class = StoreSerializer
-    permission_classes = [AllowAny]  # Allow access to all users
+    if not item_type:
+        return JsonResponse({'error': 'Item type is required.'}, status=400)
 
-class DriverListCreateView(generics.ListCreateAPIView):
-    queryset = Driver.objects.all()
-    serializer_class = DriverSerializer
-    permission_classes = [AllowAny]  # Allow access to all users
+    if not warehouse_id:
+        return JsonResponse({'error': 'Warehouse ID is required.'}, status=400)
 
-class DriverRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Driver.objects.all()
-    serializer_class = DriverSerializer
-    permission_classes = [AllowAny]  # Allow access to all users
+    items_list = items  # Use the provided items list directly
+    pickup = Pickup.objects.create(driver_id=driver_id, warehouse_id=warehouse_id)  # Create a new pickup instance
 
-class PickupListCreateView(generics.ListCreateAPIView):
-    queryset = Pickup.objects.all()
-    serializer_class = PickupSerializer
-    permission_classes = [AllowAny]  # Allow access to all users
+    successfully_added = []
+    errors = []
 
-class PickupRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Pickup.objects.all()
-    serializer_class = PickupSerializer
-    permission_classes = [AllowAny]  # Allow access to all users
+    if item_type == 'product':
+        for code in items_list:
+            try:
+                product = Product.objects.get(item_code=code.strip())
+                if product.status == "in_warehouse":
+                    # Update product details
+                    product.warehouse_id = None  # Remove warehouse ID
+                    product.driver_id = driver_id  # Assign the driver ID
+                    product.status = "in_transit"  # Change status to in_transit
+                    product.save()  # Save the updated product instance
+                    pickup.products.add(product)  # Add the product to the pickup
+                    successfully_added.append(product.item_code)
+                else:
+                    errors.append({
+                        'item_code': code.strip(),
+                        'error': 'Product is not in warehouse'
+                    })
+            except Product.DoesNotExist:
+                errors.append({
+                    'item_code': code.strip(),
+                    'error': 'Product does not exist'
+                })
 
-class ReturnListCreateView(generics.ListCreateAPIView):
-    queryset = Return.objects.all()
-    serializer_class = ReturnSerializer
-    permission_classes = [AllowAny]  # Allow access to all users
+    elif item_type == 'box':
+        for box_code in items_list:
+            box_code = box_code.strip()
+            # Fetch products associated with the box code from the products API
+            response = requests.get(f'{apiUrl}/products?box_code={box_code}')
 
-class ReturnRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Return.objects.all()
-    serializer_class = ReturnSerializer
-    permission_classes = [AllowAny]  # Allow access to all users
+            if response.status_code == 200:
+                products = response.json()
 
-def download_qr_code(request, store_id):
+                for product in products:
+                    try:
+                        product_instance = Product.objects.get(id=product['id'])
+                        if product_instance.status == "in_warehouse":
+                            # Update product details
+                            product_instance.warehouse_id = None  # Remove warehouse ID
+                            product_instance.driver_id = driver_id  # Assign the driver ID
+                            product_instance.status = "in_transit"  # Change status to in_transit
+                            product_instance.save()  # Save the updated product instance
+                            pickup.products.add(product_instance)  # Add the product to the pickup
+                            successfully_added.append(product_instance.item_code)
+                        else:
+                            errors.append({
+                                'item_code': product['item_code'],
+                                'error': 'Product is not in warehouse'
+                            })
+                    except Product.DoesNotExist:
+                        errors.append({
+                            'item_code': product['item_code'],
+                            'error': 'Product does not exist'
+                        })
+            else:
+                errors.append({
+                    'box_code': box_code,
+                    'error': f'Failed to fetch products for box code {box_code}.'
+                })
+
+    else:
+        return JsonResponse({'error': 'Invalid item type. Must be "product" or "box".'}, status=400)
+
+    pickup.save()  # Save the pickup instance
+
+    return JsonResponse({
+        'pickup_id': pickup.id,
+        'driver_id': pickup.driver_id,
+        'successfully_added': successfully_added,
+        'errors': errors,
+        'total_products_added': len(successfully_added),
+        'total_errors': len(errors),
+    }, status=201)
+
+
+# ------------------------------------------ CREATE DROPOFF (FOR APP)  ------------------------------------------ 
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_dropoff(request):
+    driver_id = request.data.get('driver_id')
+    items = request.data.get('items')  # This should be a list of strings
+    item_type = request.data.get('item_type')  # 'product' or 'box'
+    store_id = request.data.get('store_id')
+
+    if not driver_id:
+     return JsonResponse({'error': 'Driver ID is required.'}, status=400)
+
+    if not items:
+        return JsonResponse({'error': 'Items are required.'}, status=400)
+
+    if not item_type:
+        return JsonResponse({'error': 'Item type is required.'}, status=400)
+
+    if not store_id:
+        return JsonResponse({'error': 'Store ID is required.'}, status=400)
+
+    items_list = items  # Use the provided items list directly
+    dropoff = DropOff.objects.create(driver_id=driver_id, store_id=store_id)  # Create a new pickup instance
+
+    successfully_added = []
+    errors = []
+
+    if item_type == 'product':
+        for code in items_list:
+            try:
+                product = Product.objects.get(item_code=code.strip())
+                if product.status == "in_transit":
+                    # Update product details
+                    product.driver_id = None  # Remove Store ID
+                    product.store_id = store_id  # Assign the driver ID
+                    product.status = "in_store"  # Change status to in_transit
+                    product.save()  # Save the updated product instance
+                    dropoff.products.add(product)  # Add the product to the pickup
+                    successfully_added.append(product.item_code)
+                else:
+                    errors.append({
+                        'item_code': code.strip(),
+                        'error': 'Product is not in available in pickup list'
+                    })
+            except Product.DoesNotExist:
+                errors.append({
+                    'item_code': code.strip(),
+                    'error': 'Product does not exist'
+                })
+
+    elif item_type == 'box':
+        for box_code in items_list:
+            box_code = box_code.strip()
+            # Fetch products associated with the box code from the products API
+            response = requests.get(f'{apiUrl}/products?box_code={box_code}')
+
+            if response.status_code == 200:
+                products = response.json()
+
+                for product in products:
+                    try:
+                        product_instance = Product.objects.get(id=product['id'])
+                        if product_instance.status == "in_transit":
+                            # Update product details
+                            product_instance.driver_id = None  # Remove warehouse ID
+                            product_instance.store_id = store_id  # Assign the driver ID
+                            product_instance.status = "in_store"  # Change status to in_transit
+                            product_instance.save()  # Save the updated product instance
+                            dropoff.products.add(product_instance)  # Add the product to the pickup
+                            successfully_added.append(product_instance.item_code)
+                        else:
+                            errors.append({
+                                'item_code': product['item_code'],
+                                'error': 'Product is not in pickup list'
+                            })
+                    except Product.DoesNotExist:
+                        errors.append({
+                            'item_code': product['item_code'],
+                            'error': 'Product does not exist'
+                        })
+            else:
+                errors.append({
+                    'box_code': box_code,
+                    'error': f'Failed to fetch products for box code {box_code}.'
+                })
+
+    else:
+        return JsonResponse({'error': 'Invalid item type. Must be "product" or "box".'}, status=400)
+
+    dropoff.save()  # Save the pickup instance
+
+    return JsonResponse({
+        'dropoff_id': dropoff.id,
+        'driver_id': dropoff.driver_id,
+        'store_id':dropoff.store_id,
+        'successfully_added': successfully_added,
+        'errors': errors,
+        'total_products_added': len(successfully_added),
+        'total_errors': len(errors),
+    }, status=201)
+
+# ------------------------------------------ TAKE INVENTORY (FOR APP)  ------------------------------------------ 
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def take_inventory(request):
+    store_id = request.data.get('store_id')
+    items = request.data.get('items')  # This should be a list of strings
+    item_type = request.data.get('item_type')  # 'product' or 'box'
+
+    if not store_id:
+     return JsonResponse({'error': 'Store ID is required.'}, status=400)
+
+    if not items:
+        return JsonResponse({'error': 'Items are required.'}, status=400)
+
+    if not item_type:
+        return JsonResponse({'error': 'Item type is required.'}, status=400)
+
+    items_list = items  # Use the provided items list directly
+
+    successfully_matched = []
+    errors = []
+    missing_products = []
+
+    # Fetch all products associated with the store_id
+    current_products = Product.objects.filter(store_id=store_id)
+    current_product_codes = set(current_products.values_list('item_code', flat=True))
+
+    if item_type == 'product':
+        # Convert incoming product codes into a set
+        new_product_codes = set(code.strip() for code in items_list)
+
+        # Identify products that are no longer present in the new product list
+        missing_product_codes = current_product_codes - new_product_codes
+
+        # Update the status of missing products to 'sold' and remove store_id and box_code
+        Product.objects.filter(item_code__in=missing_product_codes, store_id=store_id).update(
+            status='sold', store_id=None, box_code=None
+        )
+
+        # Check which items are successfully matched
+        for code in new_product_codes:
+            if code in current_product_codes:
+                successfully_matched.append(code)
+            else:
+                errors.append({
+                    'item_code': code,
+                    'error': 'Product does not exist in store inventory'
+                })
+
+        # Collect missing products for response
+        missing_products = list(missing_product_codes)
+
+    elif item_type == 'box':
+        for box_code in items_list:
+            box_code = box_code.strip()
+            # Fetch products associated with the box code from the products API
+            response = requests.get(f'{apiUrl}/products?box_code={box_code}')
+
+            if response.status_code == 200:
+                products = response.json()
+                box_product_codes = set(product['item_code'] for product in products)
+
+                # Identify products that are no longer present in the box
+                missing_box_products = current_product_codes - box_product_codes
+
+                # Update the status of missing products to 'sold' and remove store_id and box_code
+                Product.objects.filter(item_code__in=missing_box_products, store_id=store_id).update(
+                    status='sold', store_id=None, box_code=None
+                )
+
+                # Check which items are successfully matched
+                for product in products:
+                    if product['item_code'] in current_product_codes:
+                        successfully_matched.append(product['item_code'])
+                    else:
+                        errors.append({
+                            'item_code': product['item_code'],
+                            'error': 'Product does not exist in store inventory'
+                        })
+
+                # Collect missing products for response
+                missing_products.extend(list(missing_box_products))
+            else:
+                errors.append({
+                    'box_code': box_code,
+                    'error': f'Failed to fetch products for box code {box_code}.'
+                })
+    else:
+        return JsonResponse({'error': 'Invalid item type. Must be "product" or "box".'}, status=400)
+
+    return JsonResponse({
+        'store_id': store_id,
+        'successfully_matched': successfully_matched,
+        'errors': errors,
+        'missing_products_marked_as_sold': missing_products,
+        'total_products_matched': len(successfully_matched),
+        'total_missing_products': len(missing_products),
+        'total_errors': len(errors),
+    }, status=200)
+
+# ------------------------------------------ INITATE RETURN  (FOR APP)  ------------------------------------------ 
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def initiate_return(request):
+    driver_id = request.data.get('driver_id')
+    items = request.data.get('items')  # This should be a list of strings
+    item_type = request.data.get('item_type')  # 'product' or 'box'
+    store_id = request.data.get('store_id')
+
+    if not driver_id:
+        return JsonResponse({'error': 'Driver ID is required.'}, status=400)
+
+    if not items:
+        return JsonResponse({'error': 'Items are required.'}, status=400)
+
+    if not item_type:
+        return JsonResponse({'error': 'Item type is required.'}, status=400)
+
+    if not store_id:
+        return JsonResponse({'error': 'Store ID is required.'}, status=400)
+
+    items_list = items  # Use the provided items list directly
+    successfully_updated = []
+    errors = []
+
+    # Create a Return object
+    return_instance = Return.objects.create(driver_id=driver_id, store_id=store_id)
+
+    if item_type == 'product':
+        for code in items_list:
+            try:
+                product = Product.objects.get(item_code=code.strip())
+                print(type(store_id))
+                print(type(product.store_id))
+                if product.status == "in_store" and int(product.store_id) == int(store_id):
+                    # Update product details
+                    product.store_id = None  # Remove store ID
+                    product.driver_id = driver_id  # Assign the driver ID
+                    product.status = "in_return_transit"  # Change status to in_return_transit
+                    product.save()  # Save the updated product instance
+                    successfully_updated.append(product.item_code)
+
+                    # Associate product with the return instance
+                    return_instance.products.add(product)
+                else:
+                    errors.append({
+                        'item_code': code.strip(),
+                        'error': 'Product is not in store or store mismatch'
+                    })
+            except Product.DoesNotExist:
+                errors.append({
+                    'item_code': code.strip(),
+                    'error': 'Product does not exist'
+                })
+
+    elif item_type == 'box':
+        for box_code in items_list:
+            box_code = box_code.strip()
+            # Fetch products associated with the box code from the products API
+            response = requests.get(f'{apiUrl}/products?box_code={box_code}')
+
+            if response.status_code == 200:
+                products = response.json()
+
+                for product in products:
+                    try:
+                        product_instance = Product.objects.get(id=product['id'])
+                        if product_instance.status == "in_store" and str(product_instance.store_id) == str(store_id):
+                            # Update product details
+                            product_instance.store_id = None  # Remove store ID
+                            product_instance.driver_id = driver_id  # Assign the driver ID
+                            product_instance.status = "in_return_transit"  # Change status to in_return_transit
+                            product_instance.save()  # Save the updated product instance
+                            successfully_updated.append(product_instance.item_code)
+
+                            # Associate product with the return instance
+                            return_instance.products.add(product_instance)
+                        else:
+                            print(f"Product Status: {product_instance.status}, Product Store ID: {type(product_instance.store_id)}, Incoming Store ID: {type(store_id)}")
+                            errors.append({
+                                'item_code': product['item_code'],
+                                'error': 'Product is not in store or store mismatch'
+                            })
+                    except Product.DoesNotExist:
+                        errors.append({
+                            'item_code': product['item_code'],
+                            'error': 'Product does not exist'
+                        })
+            else:
+                errors.append({
+                    'box_code': box_code,
+                    'error': f'Failed to fetch products for box code {box_code}.'
+                })
+    else:
+        return JsonResponse({'error': 'Invalid item type. Must be "product" or "box".'}, status=400)
+
+    return JsonResponse({
+        'return_id': return_instance.id,  # Return the ID of the newly created return instance
+        'driver_id': driver_id,
+        'successfully_updated': successfully_updated,
+        'errors': errors,
+        'total_products_updated': len(successfully_updated),
+        'total_errors': len(errors),
+    }, status=200)
+
+
+# ------------------------------------------ RECEIVE RETURN  ------------------------------------------ 
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def receive_return(request):
+    return_id = request.data.get('return_id')
+    warehouse_id = request.data.get('warehouse_id')
+
+    if not return_id or not warehouse_id:
+        return JsonResponse({'error': 'Return ID and warehouse ID are required.'}, status=400)
+
     try:
-        store = Store.objects.get(id=store_id)
-        response = HttpResponse(store.qr_code_image, content_type='image/png')
-        response['Content-Disposition'] = f'attachment; filename="{store.name}_qr_code.png"'
-        return response
-    except Store.DoesNotExist:
-        return HttpResponse(status=404)
+        return_instance = Return.objects.get(id=return_id)
+    except Return.DoesNotExist:
+        return JsonResponse({'error': 'Return does not exist.'}, status=404)
+
+    # Update product statuses and get the list of successfully returned products
+    successfully_returned_products = return_instance.update_product_status(warehouse_id)
+
+    return JsonResponse({
+        'message': 'Return processed successfully.',
+        'successfully_returned_products': successfully_returned_products
+    }, status=200)
+
+#

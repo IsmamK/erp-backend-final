@@ -3,6 +3,7 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
+    
     # Product URLs
     path('products/', ProductListCreateView.as_view(), name='product-list-create'),
     path('products/<int:pk>/', ProductRetrieveUpdateDestroyView.as_view(), name='product-detail'),
@@ -30,4 +31,20 @@ urlpatterns = [
     # Return URLs
     path('returns/', ReturnListCreateView.as_view(), name='return-list-create'),
     path('returns/<int:pk>/', ReturnRetrieveUpdateDestroyView.as_view(), name='return-detail'),
+
+
+    # Return URLs
+    path('dropoffs/', DropoffListCreateView.as_view(), name='dropoff-list-create'),
+    path('dropoffs/<int:pk>/', DropoffRetrieveUpdateDestroyView.as_view(), name='dropoff-detail'),
+
+    #Specific task urls
+    path('create-pickup/', create_pickup, name='create_pickup'),
+    path('create-dropoff/', create_dropoff, name='create_dropoff'),
+    path('take-inventory/', take_inventory, name='take_inventory'),
+    path('initiate-return/', initiate_return, name='initiate_return'),
+    path('receive-return/', receive_return, name='receive_return'),
+
+
+
+
 ]

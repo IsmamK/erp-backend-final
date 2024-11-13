@@ -25,7 +25,12 @@ SECRET_KEY = "django-insecure-jg$*^0t3f-twi%k4pw2$%hn*4pjt8p^!8=8)7np@p4umw$9ff3
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "*",
+    "thefoodpark.xyz",
+    "www.thefoodpark.xyz"
+
+    ]
 
 
 # Application definition
@@ -37,14 +42,21 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    'django_filters',
     # Third-party apps
     'rest_framework',
+      'rest_framework.authtoken',
     'corsheaders',
     'djoser',
     'drf_yasg',
     # Your app
     'api',
+    'drf_spectacular',
+    
 ]
+
+
+
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -120,16 +132,28 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ],
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
+
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'ERP API ',
+    'DESCRIPTION': 'BACKEND FOR ERP INVENTORY',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    # Other options as needed
+}
+
 
 
 import os
