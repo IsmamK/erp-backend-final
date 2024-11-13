@@ -145,6 +145,12 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
+DJOSER = {
+    'SERIALIZERS': {
+        'token': 'api.serializers.CustomTokenSerializer',
+    },
+}
+
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'ERP API ',

@@ -9,8 +9,49 @@ import json
 from django.core.files.base import ContentFile
 from io import BytesIO
 from django.contrib.auth.models import User
-
 from django.db import models
+
+class Profile(models.Model):
+    ROLE_CHOICES = [
+        ('admin', 'Admin'),
+        ('warehouse_staff', 'Warehouse Staff'),
+        ('store_manager', 'Store Manager'),
+       
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    role = models.CharField(max_length=50, choices=ROLE_CHOICES)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    contact_number = models.CharField(max_length=20, blank=True, null=True)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
+    
+    # Add any additional fields specific to the roles if needed
+    # Example fields that might only be relevant for drivers
+   
+    def __str__(self):
+        return f"{self.user.username} - {self.get_role_display()}"
+
+
+class Driver(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True,related_name = "drivers")
+    profile_picture = models.ImageField(upload_to='media/', blank=True, null=True)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    contact_number = models.CharField(max_length=20)
+    iqama_number = models.CharField(max_length=100)
+    nationality = models.CharField(max_length=100)
+    iqama_expiry_date = models.DateField()
+    driving_license_expiry_date = models.DateField()
+    current_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    current_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+
+
 
 class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -114,22 +155,6 @@ class Store(models.Model):
     def __str__(self):
         return self.name
 
-class Driver(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True)
-    user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True,related_name = "drivers")
-    profile_picture = models.ImageField(upload_to='media/', blank=True, null=True)
-    first_name = models.CharField(max_length=100)
-    last_name = models.CharField(max_length=100)
-    contact_number = models.CharField(max_length=20)
-    iqama_number = models.CharField(max_length=100)
-    nationality = models.CharField(max_length=100)
-    iqama_expiry_date = models.DateField()
-    driving_license_expiry_date = models.DateField()
-    current_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    current_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-
-    def __str__(self):
-        return f"{self.first_name} {self.last_name}"
 
 class Pickup(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
