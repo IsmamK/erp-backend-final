@@ -10,7 +10,6 @@ urlpatterns = [
     path('products/bulk_upload/', bulk_upload_products, name='bulk_upload_products'),
     path('products/download_template/', download_template, name='download_template'),
 
-
     # Warehouse URLs
     path('warehouses/', WarehouseListCreateView.as_view(), name='warehouse-list-create'),
     path('warehouses/<int:pk>/', WarehouseRetrieveUpdateDestroyView.as_view(), name='warehouse-detail'),

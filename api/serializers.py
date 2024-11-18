@@ -38,6 +38,7 @@ class CustomTokenSerializer(TokenSerializer):
                 "iqama_number": driver.iqama_number,
                 "nationality": driver.nationality,
                 "iqama_expiry_date": driver.iqama_expiry_date,
+                "profile_picture": driver.profile_picture.url if driver.profile_picture else None,
                 "driving_license_expiry_date": driver.driving_license_expiry_date,
                 "current_location": {
                     "latitude": driver.current_latitude,
@@ -82,3 +83,4 @@ class ReturnSerializer(serializers.ModelSerializer):
     class Meta:
         model = Return
         fields = '__all__'
+

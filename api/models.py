@@ -161,16 +161,25 @@ class Pickup(models.Model):
     driver = models.ForeignKey(Driver, on_delete=models.CASCADE)
     products = models.ManyToManyField(Product)  # Use ManyToManyField for products
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE)
-    
+    status = models.CharField(max_length=255, choices=[ ("pending","pending") , ("completed","completed")] ,default='pending')
     def __str__(self):
         return f"Pickup {self.id} - {self.products.count()} Products"
 
 class DropOff(models.Model):
+    CHOICES = [("initiated","Initiated"),
+               ("cash_collected","Cash Collected")
+               ]
+    COLLECTION_CHOICES = [("CASH","CASH"),
+               ("POS","POS")
+               ]
     created_at = models.DateTimeField(auto_now_add=True)
     driver = models.ForeignKey(Driver, on_delete=models.CASCADE, related_name='dropoffs')  # Link to Pickup
     store = models.ForeignKey(Store, on_delete=models.CASCADE)  # The store where products are dropped off
     products = models.ManyToManyField(Product)  # The products being dropped off
-    dropoff_time = models.DateTimeField(default=timezone.now)  # Time of the drop-off
+    dropoff_time = models.DateTimeField(default=timezone.now) # Time of the drop-off
+    total_value = models.DecimalField(decimal_places=2,max_digits=20,null=True,blank=True)
+    status = models.CharField(default="initiated",choices=CHOICES,max_length=255)
+    method_of_collection = models.CharField(choices=COLLECTION_CHOICES,max_length=255,default="CASH")
 
     def __str__(self):
         product_names = ', '.join([product.name for product in self.products.all()])
@@ -194,3 +203,24 @@ class Return(models.Model):
                 product.warehouse_id = warehouse_id  # Set the warehouse ID
                 product.driver = None  # Optionally remove the driver
                 product.save()
+
+
+# INVOICING BY ZATCA
+
+# models.py
+from django.db import models
+
+# class Invoice(models.Model):
+#     invoice_number = models.CharField(max_length=100)
+#     date_issued = models.DateField()
+#     seller_name = models.CharField(max_length=255)
+#     seller_vat_number = models.CharField(max_length=20)
+#     buyer_name = models.CharField(max_length=255)
+#     buyer_vat_number = models.CharField(max_length=20)
+#     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+#     tax_amount = models.DecimalField(max_digits=10, decimal_places=2)
+#     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+#     status = models.CharField(max_length=50, default='Pending')  # Status can be 'Pending', 'Sent', etc.
+
+#     def __str__(self):
+#         return f"Invoice {self.invoice_number}"

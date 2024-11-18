@@ -49,9 +49,9 @@ INSTALLED_APPS = [
     'corsheaders',
     'djoser',
     'drf_yasg',
-    # Your app
     'api',
     'drf_spectacular',
+    'channels',
     
 ]
 
@@ -168,3 +168,11 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
+
+ASGI_APPLICATION = 'erp_backend.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}

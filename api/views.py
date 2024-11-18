@@ -12,7 +12,8 @@ from rest_framework import filters
 from django.http import JsonResponse
 from rest_framework.decorators import api_view
 import requests
-
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 apiUrl =  "http://localhost:8000/api"
 
@@ -183,6 +184,7 @@ def create_pickup(request):
     item_type = request.data.get('item_type')  # 'product' or 'box'
     warehouse_id = request.data.get('warehouse_id')
 
+
     if not driver_id:
         return JsonResponse({'error': 'Driver ID is required.'}, status=400)
 
@@ -265,6 +267,21 @@ def create_pickup(request):
 
     pickup.save()  # Save the pickup instance
 
+  
+    if len(successfully_added)!=0:
+        # WebSocket notification - send to the driver after all operations are done
+        channel_layer = get_channel_layer()
+        message = f"New pickup created with ID: {pickup.id}. Products added: {len(successfully_added)}"
+
+        # Send the message to the driver’s WebSocket group
+        async_to_sync(channel_layer.group_send)(
+            f"driver_{driver_id}",  # The group name for the driver
+            {
+                'type': 'pickup_notification',  # This matches the method in the consumer
+                'message': message,
+            }
+        )
+
     return JsonResponse({
         'pickup_id': pickup.id,
         'driver_id': pickup.driver_id,
@@ -284,6 +301,7 @@ def create_dropoff(request):
     items = request.data.get('items')  # This should be a list of strings
     item_type = request.data.get('item_type')  # 'product' or 'box'
     store_id = request.data.get('store_id')
+    method_of_collection = request.data.get('method_of_collection')
 
     if not driver_id:
      return JsonResponse({'error': 'Driver ID is required.'}, status=400)
@@ -298,15 +316,16 @@ def create_dropoff(request):
         return JsonResponse({'error': 'Store ID is required.'}, status=400)
 
     items_list = items  # Use the provided items list directly
-    dropoff = DropOff.objects.create(driver_id=driver_id, store_id=store_id)  # Create a new pickup instance
+    dropoff = DropOff.objects.create(driver_id=driver_id, store_id=store_id,method_of_collection=method_of_collection)  # Create a new pickup instance
 
     successfully_added = []
     errors = []
-
+    total_amount = 0
     if item_type == 'product':
         for code in items_list:
             try:
                 product = Product.objects.get(item_code=code.strip())
+                total_amount += product.buying_price
                 if product.status == "in_transit":
                     # Update product details
                     product.driver_id = None  # Remove Store ID
@@ -336,6 +355,7 @@ def create_dropoff(request):
                 products = response.json()
 
                 for product in products:
+                    total_amount += product.buying_price
                     try:
                         product_instance = Product.objects.get(id=product['id'])
                         if product_instance.status == "in_transit":
@@ -362,15 +382,20 @@ def create_dropoff(request):
                     'error': f'Failed to fetch products for box code {box_code}.'
                 })
 
+    
     else:
         return JsonResponse({'error': 'Invalid item type. Must be "product" or "box".'}, status=400)
 
+    dropoff.total_value = total_amount
     dropoff.save()  # Save the pickup instance
 
     return JsonResponse({
         'dropoff_id': dropoff.id,
         'driver_id': dropoff.driver_id,
+        'status':dropoff.status,
         'store_id':dropoff.store_id,
+        "method_of_collection":dropoff.method_of_collection,
+        'total_value':dropoff.total_value,
         'successfully_added': successfully_added,
         'errors': errors,
         'total_products_added': len(successfully_added),
@@ -611,3 +636,42 @@ def receive_return(request):
     }, status=200)
 
 #
+
+# # views.py
+# import requests
+# from django.http import JsonResponse
+# from .models import Invoice
+# from .util import generate_invoice_xml, generate_qr_code, sign_invoice_xml
+
+# def send_invoice_to_zatca(invoice_id):
+#     # Get the invoice data
+#     invoice = Invoice.objects.get(id=invoice_id)
+
+#     # Generate XML and sign it
+#     xml_data = generate_invoice_xml(invoice)
+#     signature = sign_invoice_xml(xml_data)
+    
+#     # Generate the QR code
+#     qr_path = generate_qr_code(invoice)
+    
+#     # API details
+#     zatca_url = "https://api.zatca.gov.sa/your-endpoint"
+#     headers = {
+#         "Authorization": "Bearer YOUR_API_TOKEN",
+#         "Content-Type": "application/xml",
+#     }
+
+#     # Constructing payload
+#     payload = {
+#         "invoice_xml": xml_data,
+#         "signature": signature,
+#         "qr_code": qr_path
+#     }
+
+#     # Send POST request to ZATCA API
+#     response = requests.post(zatca_url, headers=headers, data=payload)
+    
+#     if response.status_code == 200:
+#         return JsonResponse({"status": "success", "message": "Invoice sent successfully"})
+#     else:
+#         return JsonResponse({"status": "error", "message": response.text})
