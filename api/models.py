@@ -157,11 +157,11 @@ class Store(models.Model):
 
 
 class Pickup(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateField(auto_now_add=True)
     driver = models.ForeignKey(Driver, on_delete=models.CASCADE)
     products = models.ManyToManyField(Product)  # Use ManyToManyField for products
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE)
-    status = models.CharField(max_length=255, choices=[ ("pending","pending") , ("completed","completed")] ,default='pending')
+    status = models.CharField(max_length=255, choices=[ ("pending","pending") , ("completed","completed")] ,default="pending")
     def __str__(self):
         return f"Pickup {self.id} - {self.products.count()} Products"
 
