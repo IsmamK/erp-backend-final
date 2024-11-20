@@ -42,6 +42,7 @@ urlpatterns = [
     path('take-inventory/', take_inventory, name='take_inventory'),
     path('initiate-return/', initiate_return, name='initiate_return'),
     path('receive-return/', receive_return, name='receive_return'),
+    path("get-cashflow-data/",get_cashflow_data,name="get_cashflow_data"),
 
 
 

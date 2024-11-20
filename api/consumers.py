@@ -1,4 +1,3 @@
-# your_app/consumers.py
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 
@@ -25,15 +24,38 @@ class DriverConsumer(AsyncWebsocketConsumer):
     # Receive messages from the WebSocket
     async def receive(self, text_data):
         data = json.loads(text_data)
-        message = data['message']
-        # Send message to WebSocket
+
+        # Handle location updates
+        if 'location' in data:
+            location = data['location']  # e.g., {'latitude': 12.34, 'longitude': 56.78}
+            
+            # Broadcast the location update to the group
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'location_update',
+                    'location': location
+                }
+            )
+
+        # Handle other messages
+        elif 'message' in data:
+            message = data['message']
+            await self.send(text_data=json.dumps({
+                'message': message
+            }))
+
+    # Receive location updates from the group
+    async def location_update(self, event):
+        location = event['location']
+
+        # Send the location update to the WebSocket
         await self.send(text_data=json.dumps({
-            'message': message
+            'location': location
         }))
 
-    # Receive message from the group
+    # Receive other notifications from the group
     async def pickup_notification(self, event):
-        # Send the message to WebSocket
         message = event['message']
         await self.send(text_data=json.dumps({
             'message': message

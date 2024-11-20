@@ -185,6 +185,7 @@ class DropOff(models.Model):
         product_names = ', '.join([product.name for product in self.products.all()])
         return f"DropOff {self.id} - {product_names} to {self.store.name}"
 
+
 class Return(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     driver = models.ForeignKey(Driver, on_delete=models.CASCADE)

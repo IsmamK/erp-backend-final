@@ -268,7 +268,7 @@ def create_pickup(request):
     pickup.save()  # Save the pickup instance
 
   
-    if len(successfully_added)!=0:
+    if len(successfully_added) != 0:
         # WebSocket notification - send to the driver after all operations are done
         channel_layer = get_channel_layer()
         message = f"New pickup created with ID: {pickup.id}. Products added: {len(successfully_added)}"
@@ -636,6 +636,17 @@ def receive_return(request):
     }, status=200)
 
 #
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_cashflow_data(request):
+    return JsonResponse({
+        "cash":"25000",
+        "pos":"30000",
+        "returned-parcel":"33",
+        "delivered-parcel":"140",
+
+    })
 
 # # views.py
 # import requests
