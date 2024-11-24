@@ -43,8 +43,12 @@ urlpatterns = [
     path('initiate-return/', initiate_return, name='initiate_return'),
     path('receive-return/', receive_return, name='receive_return'),
     path("get-cashflow-data/",get_cashflow_data,name="get_cashflow_data"),
+    #product activity log
+    path('product-activity-logs/', ProductActivityLogListCreateAPIView.as_view(), name='activity-log-list-create'),
+    path('product-activity-logs/<int:pk>/', ProductActivityLogRetrieveUpdateDestroyAPIView.as_view(), name='activity-log-detail'),
 
-
-
+    # Push Notifications and location receive
+    path('driver/update-location/', update_driver_location, name='update-driver-location'),
+    path('driver/set-fcm-token/', SetFCMTokenView.as_view(), name='set-fcm-token'),
 
 ]

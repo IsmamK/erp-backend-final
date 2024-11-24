@@ -49,7 +49,14 @@ class CustomTokenSerializer(TokenSerializer):
         return user_data
 
 
+class ProductActivityLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductActivityLog
+        fields = "__all__"
+
+
 class ProductSerializer(serializers.ModelSerializer):
+    activity_logs = serializers.StringRelatedField(many=True,read_only=True)
     class Meta:
         model = Product
         fields = '__all__'
@@ -83,4 +90,3 @@ class ReturnSerializer(serializers.ModelSerializer):
     class Meta:
         model = Return
         fields = '__all__'
-

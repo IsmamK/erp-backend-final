@@ -14,8 +14,14 @@ from rest_framework.decorators import api_view
 import requests
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from django.views.decorators.csrf import csrf_exempt
+import firebase_admin
+from firebase_admin import messaging
+import json
 
 apiUrl =  "http://localhost:8000/api"
+
+
 
 class ProductListCreateView(generics.ListCreateAPIView):
     queryset = Product.objects.all()
@@ -29,6 +35,24 @@ class ProductRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     permission_classes = [AllowAny]  # Allow access to all users
+
+
+class ProductActivityLogListCreateAPIView(generics.ListCreateAPIView):
+    """
+    API endpoint to view and create product activity logs.
+    """
+    queryset = ProductActivityLog.objects.all()
+    serializer_class = ProductActivityLogSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = "__all__"
+    search_fields = "__all__"
+
+class ProductActivityLogRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    API endpoint to retrieve, update, or delete a specific product activity log.
+    """
+    queryset = ProductActivityLog.objects.all()
+    serializer_class = ProductActivityLogSerializer
 
 
 class WarehouseListCreateView(generics.ListCreateAPIView):
@@ -133,6 +157,7 @@ def bulk_upload_products(request):
         return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
 
     file = request.FILES['file']
+    created_by = request.POST.get('created_by')
     try:
         df = pd.read_excel(file)
         required_columns = {'name', 'box_code', 'item_code', 'buying_price', 'selling_price', 'warehouse_id'}
@@ -145,6 +170,7 @@ def bulk_upload_products(request):
         products = []
         for _, row in df.iterrows():
             product_data = {
+                "created_by":created_by,
                 'name': row['name'],
                 'box_code': row['box_code'],
                 'item_code': row['item_code'],
@@ -183,7 +209,7 @@ def create_pickup(request):
     items = request.data.get('items')  # This should be a list of strings
     item_type = request.data.get('item_type')  # 'product' or 'box'
     warehouse_id = request.data.get('warehouse_id')
-
+    created_by = Profile.objects.get(pk=request.data.get('created_by'))
 
     if not driver_id:
         return JsonResponse({'error': 'Driver ID is required.'}, status=400)
@@ -198,7 +224,7 @@ def create_pickup(request):
         return JsonResponse({'error': 'Warehouse ID is required.'}, status=400)
 
     items_list = items  # Use the provided items list directly
-    pickup = Pickup.objects.create(driver_id=driver_id, warehouse_id=warehouse_id)  # Create a new pickup instance
+    pickup = Pickup.objects.create(driver_id=driver_id, warehouse_id=warehouse_id,created_by=created_by)  # Create a new pickup instance
 
     successfully_added = []
     errors = []
@@ -267,7 +293,9 @@ def create_pickup(request):
 
     pickup.save()  # Save the pickup instance
 
-  
+    driver = Driver.objects.get(pk=driver_id)
+    send_fcm_notification(driver)
+    
     if len(successfully_added) != 0:
         # WebSocket notification - send to the driver after all operations are done
         channel_layer = get_channel_layer()
@@ -291,6 +319,60 @@ def create_pickup(request):
         'total_errors': len(errors),
     }, status=201)
 
+# ------------------------------------------ FCM ENDPOINTS  ------------------------------------------ 
+def send_fcm_notification(driver):
+    # Assuming that the driver has an FCM token stored in the 'fcm_token' field
+    fcm_token = driver.fcm_token
+
+    # Create the message to send
+    message = messaging.Message(
+        notification=messaging.Notification(
+            title="New Pickup Assigned",
+            body=f"You have been assigned a new pickup with {driver.first_name} {driver.last_name}.",
+        ),
+        token=fcm_token,
+    )
+
+    # Send the notification
+    try:
+        response = messaging.send(message)
+        print('Successfully sent message:', response)
+    except Exception as e:
+        print(f"Error sending message: {e}")
+
+# Example endpoint to update driver's location
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def update_driver_location(request):
+    driver = Driver.objects.get(request.data.get("driver_id"))
+    latitude = request.data.get('latitude')
+    longitude = request.data.get('longitude')
+
+    # Update the driver's location
+    driver.current_latitude = latitude
+    driver.current_longitude = longitude
+    driver.save()
+
+    return JsonResponse({'message': 'Location updated successfully'}, status=200)
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+class SetFCMTokenView(APIView):
+    def post(self, request):
+        driver = Driver.objects.ge(request.data.get("driver_id"))
+        fcm_token = request.data.get('fcm_token')
+
+        if not fcm_token:
+            return Response({"error": "FCM token is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Save the token to the user's profile or database
+        driver.fcm_token = fcm_token
+        driver.save()
+
+        return Response({"message": "FCM token saved successfully"}, status=status.HTTP_200_OK)
+
+
 
 # ------------------------------------------ CREATE DROPOFF (FOR APP)  ------------------------------------------ 
 
@@ -301,7 +383,7 @@ def create_dropoff(request):
     items = request.data.get('items')  # This should be a list of strings
     item_type = request.data.get('item_type')  # 'product' or 'box'
     store_id = request.data.get('store_id')
-    method_of_collection = request.data.get('method_of_collection')
+    method_of_collection = request.data.get('method_of_collection') or "Cash"
 
     if not driver_id:
      return JsonResponse({'error': 'Driver ID is required.'}, status=400)
@@ -325,7 +407,7 @@ def create_dropoff(request):
         for code in items_list:
             try:
                 product = Product.objects.get(item_code=code.strip())
-                total_amount += product.buying_price
+                total_amount += float(product.buying_price)
                 if product.status == "in_transit":
                     # Update product details
                     product.driver_id = None  # Remove Store ID
@@ -355,7 +437,7 @@ def create_dropoff(request):
                 products = response.json()
 
                 for product in products:
-                    total_amount += product.buying_price
+                    total_amount += float(product["buying_price"])
                     try:
                         product_instance = Product.objects.get(id=product['id'])
                         if product_instance.status == "in_transit":
@@ -410,6 +492,7 @@ def take_inventory(request):
     store_id = request.data.get('store_id')
     items = request.data.get('items')  # This should be a list of strings
     item_type = request.data.get('item_type')  # 'product' or 'box'
+    driver_id = request.data.get('driver_id')
 
     if not store_id:
      return JsonResponse({'error': 'Store ID is required.'}, status=400)
@@ -441,11 +524,24 @@ def take_inventory(request):
         Product.objects.filter(item_code__in=missing_product_codes, store_id=store_id).update(
             status='sold', store_id=None, box_code=None
         )
+        for product in (Product.objects.filter(item_code__in=missing_product_codes)):
+            ProductActivityLog.objects.create(
+                    product=product,
+                    details=f"Product {product.name} marked as sold at {timezone.now().strftime('%Y-%m-%d %H:%M')} by {Driver.objects.get(pk=driver_id)} at store {Store.objects.get(pk=store_id)}"
+                )
+            
+            
+
 
         # Check which items are successfully matched
         for code in new_product_codes:
             if code in current_product_codes:
                 successfully_matched.append(code)
+                product = Product.objects.get(item_code=code)
+                ProductActivityLog.objects.create(
+                    product=Product.objects.get(item_code = code),
+                    details=f"Inventory taken at {timezone.now().strftime('%Y-%m-%d %H:%M')} for Product {product.name} by {Driver.objects.get(pk=driver_id)} at store {Store.objects.get(pk=store_id)}"
+                )
             else:
                 errors.append({
                     'item_code': code,
@@ -471,17 +567,41 @@ def take_inventory(request):
                 # Update the status of missing products to 'sold' and remove store_id and box_code
                 Product.objects.filter(item_code__in=missing_box_products, store_id=store_id).update(
                     status='sold', store_id=None, box_code=None
-                )
+                ) 
+                for product in (Product.objects.filter(item_code__in=missing_box_products, store_id=store_id)):
+                        ProductActivityLog.objects.create(
+                            f"Product {product.name} marked as sold at {timezone.now().strftime('%Y-%m-%d %H:%M')} "
+                            f"by {Driver.objects.get(pk=driver_id)} at store {Store.objects.get(pk=store_id)}"
+                    )
+                            
 
                 # Check which items are successfully matched
                 for product in products:
                     if product['item_code'] in current_product_codes:
                         successfully_matched.append(product['item_code'])
+
+                        try:
+                            # Fetch the Product instance
+                            product_instance = Product.objects.get(item_code=product['item_code'], store_id=store_id)
+                            ProductActivityLog.objects.create(
+                                product=product_instance,
+                                details=(
+                                    f"Inventory taken at {timezone.now().strftime('%Y-%m-%d %H:%M')} "
+                                    f"for Product {product['name']} by "
+                                    f"{Driver.objects.get(pk=driver_id)} at store {Store.objects.get(pk=store_id)}"
+                                )
+                            )
+                        except Product.DoesNotExist:
+                            errors.append({
+                                'item_code': product['item_code'],
+                                'error': 'Product does not exist in store inventory'
+                            })
                     else:
                         errors.append({
                             'item_code': product['item_code'],
                             'error': 'Product does not exist in store inventory'
                         })
+
 
                 # Collect missing products for response
                 missing_products.extend(list(missing_box_products))
@@ -502,6 +622,8 @@ def take_inventory(request):
         'total_missing_products': len(missing_products),
         'total_errors': len(errors),
     }, status=200)
+
+
 
 # ------------------------------------------ INITATE RETURN  (FOR APP)  ------------------------------------------ 
 
@@ -537,8 +659,7 @@ def initiate_return(request):
         for code in items_list:
             try:
                 product = Product.objects.get(item_code=code.strip())
-                print(type(store_id))
-                print(type(product.store_id))
+                
                 if product.status == "in_store" and int(product.store_id) == int(store_id):
                     # Update product details
                     product.store_id = None  # Remove store ID
@@ -600,6 +721,15 @@ def initiate_return(request):
                 })
     else:
         return JsonResponse({'error': 'Invalid item type. Must be "product" or "box".'}, status=400)
+    
+        # Create logs after adding products
+    return_instance.save()
+
+    for product in return_instance.products.all():
+            ProductActivityLog.objects.create(
+                product=product,
+                details=f"Return initiated at {timezone.now().strftime('%Y-%m-%d %H:%M')} for Product {product.name} by {return_instance.driver.first_name}."
+            )
 
     return JsonResponse({
         'return_id': return_instance.id,  # Return the ID of the newly created return instance
@@ -616,26 +746,136 @@ def initiate_return(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def receive_return(request):
-    return_id = request.data.get('return_id')
+    product_codes = request.data.get('product_codes', [])  # List of product or box codes
     warehouse_id = request.data.get('warehouse_id')
+    profile_id = request.data.get('profile_id')
+    item_type = request.data.get('item_type')  # 'product' or 'box'
 
-    if not return_id or not warehouse_id:
-        return JsonResponse({'error': 'Return ID and warehouse ID are required.'}, status=400)
+    if not product_codes or not warehouse_id or not profile_id or not item_type:
+        return JsonResponse(
+            {'error': 'Product/Box codes, warehouse ID, profile ID, and item type are required.'},
+            status=400
+        )
 
-    try:
-        return_instance = Return.objects.get(id=return_id)
-    except Return.DoesNotExist:
-        return JsonResponse({'error': 'Return does not exist.'}, status=404)
+    profile = Profile.objects.get(pk=profile_id)
+    successfully_processed = []
+    errors = []
 
-    # Update product statuses and get the list of successfully returned products
-    successfully_returned_products = return_instance.update_product_status(warehouse_id)
+    if item_type == "product":
+        for product_code in product_codes:
+            try:
+                product = Product.objects.get(item_code=product_code.strip())
+
+                # Find the return instance associated with the product
+                return_instance = Return.objects.filter(products=product).first()
+                if not return_instance:
+                    errors.append({'product_code': product_code, 'error': 'Product is not part of any return.'})
+                    continue
+
+                # Check if the return has already been processed
+                if return_instance.status == "processed":
+                    errors.append({'product_code': product_code, 'error': 'Return has already been processed.'})
+                    continue
+
+                # Update product details
+                product.warehouse_id = warehouse_id
+                product.status = "in_warehouse"
+                product.driver_id = None
+                product.save()
+
+                # Remove product from the return instance
+                return_instance.products.remove(product)
+                successfully_processed.append(product_code)
+
+                # Log the activity
+                ProductActivityLog.objects.create(
+                    product=product,
+                    details=(
+                        f"Product {product.name} received at {timezone.now().strftime('%Y-%m-%d %H:%M')} "
+                        f"by {profile.first_name} at warehouse {warehouse_id}."
+                    )
+                )
+
+                # Mark the return as processed if all products are removed
+                if not return_instance.products.exists():
+                    return_instance.status = "processed"
+                    return_instance.save()
+
+            except Product.DoesNotExist:
+                errors.append({'product_code': product_code, 'error': 'Product does not exist.'})
+            except Profile.DoesNotExist:
+                errors.append({'product_code': product_code, 'error': 'Profile does not exist.'})
+
+    elif item_type == "box":
+        for box_code in product_codes:
+            box_code = box_code.strip()
+            # Fetch products associated with the box code from the products API
+            response = requests.get(f'{apiUrl}/products?box_code={box_code}')
+
+            if response.status_code == 200:
+                products = response.json()
+
+                for product in products:
+                    try:
+                        product_instance = Product.objects.get(id=product['id'])
+                        
+                        # Find the return instance associated with the product
+                        return_instance = Return.objects.filter(products=product_instance).first()
+                        if not return_instance:
+                            errors.append({'box_code': box_code, 'error': 'Product is not part of any return.'})
+                            continue
+
+                        # Check if the return has already been processed
+                        if return_instance.status == "processed":
+                            errors.append({'box_code': box_code, 'error': 'Return has already been processed.'})
+                            continue
+
+                        # Update product details
+                        product_instance.warehouse_id = warehouse_id
+                        product_instance.status = "in_warehouse"
+                        product_instance.driver_id = None
+                        product_instance.save()
+
+                        # Remove product from the return instance
+                        return_instance.products.remove(product_instance)
+                        successfully_processed.append(product_instance.item_code)
+
+                        # Log the activity
+                        ProductActivityLog.objects.create(
+                            product=product_instance,
+                            details=(
+                                f"Product {product_instance.name} received at {timezone.now().strftime('%Y-%m-%d %H:%M')} "
+                                f"by {profile.first_name} at warehouse {warehouse_id}."
+                            )
+                        )
+
+                        # Mark the return as processed if all products are removed
+                        if not return_instance.products.exists():
+                            return_instance.status = "processed"
+                            return_instance.save()
+
+                    except Product.DoesNotExist:
+                        errors.append({'box_code': box_code, 'error': 'Product does not exist.'})
+                    except Profile.DoesNotExist:
+                        errors.append({'box_code': box_code, 'error': 'Profile does not exist.'})
+
+            else:
+                errors.append({
+                    'box_code': box_code,
+                    'error': f'Failed to fetch products for box code {box_code}.'
+                })
+
+    else:
+        return JsonResponse({'error': 'Invalid item type. Must be "product" or "box".'}, status=400)
 
     return JsonResponse({
-        'message': 'Return processed successfully.',
-        'successfully_returned_products': successfully_returned_products
+        'message': 'Return processing completed.',
+        'successfully_processed': successfully_processed,
+        'errors': errors,
+        'total_processed': len(successfully_processed),
+        'total_errors': len(errors),
     }, status=200)
 
-#
 
 @api_view(['GET'])
 @permission_classes([AllowAny])

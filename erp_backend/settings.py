@@ -167,6 +167,8 @@ SPECTACULAR_SETTINGS = {
 }
 
 
+from api.firebase_config import initialize_firebase
+initialize_firebase()
 
 import os
 
@@ -178,7 +180,12 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
 ASGI_APPLICATION = 'erp_backend.asgi.application'
 
 CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],  # Replace with Redis host if external
+        },
     },
 }
+
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

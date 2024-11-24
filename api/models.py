@@ -47,13 +47,24 @@ class Driver(models.Model):
     driving_license_expiry_date = models.DateField()
     current_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     current_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-
+    fcm_token = models.CharField(max_length=255, blank=True, null=True)
+    
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+class ProductActivityLog(models.Model):
+    
+    product = models.ForeignKey('Product', on_delete=models.CASCADE, related_name="activity_logs")
+    details = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.details
 
 
 
 class Product(models.Model):
+    
+    created_by = models.ForeignKey(Profile,on_delete=models.SET_NULL,null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     STATUS_CHOICES = [
         ('in_warehouse', 'In Warehouse'),
@@ -76,6 +87,14 @@ class Product(models.Model):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        if is_new:
+            ProductActivityLog.objects.create(
+                product=self, 
+                details=f"Product created at {timezone.now().strftime('%Y-%m-%d %H:%M')} by {self.created_by.first_name} {self.created_by.first_name}"
+         )
 
     
 class Warehouse(models.Model):
@@ -157,6 +176,7 @@ class Store(models.Model):
 
 
 class Pickup(models.Model):
+    created_by = models.ForeignKey(Profile,on_delete=models.SET_NULL,null=True)
     created_at = models.DateField(auto_now_add=True)
     driver = models.ForeignKey(Driver, on_delete=models.CASCADE)
     products = models.ManyToManyField(Product)  # Use ManyToManyField for products
@@ -164,6 +184,14 @@ class Pickup(models.Model):
     status = models.CharField(max_length=255, choices=[ ("pending","pending") , ("completed","completed")] ,default="pending")
     def __str__(self):
         return f"Pickup {self.id} - {self.products.count()} Products"
+    
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        for product in self.products.all():
+            ProductActivityLog.objects.create(
+                product=product,
+                details=f"Pickup initiated at {timezone.now().strftime('%Y-%m-%d %H:%M')} for Product {product.name} by {self.created_by.first_name} {self.created_by.first_name} for Driver {self.driver.first_name}"
+            )
 
 class DropOff(models.Model):
     CHOICES = [("initiated","Initiated"),
@@ -179,19 +207,32 @@ class DropOff(models.Model):
     dropoff_time = models.DateTimeField(default=timezone.now) # Time of the drop-off
     total_value = models.DecimalField(decimal_places=2,max_digits=20,null=True,blank=True)
     status = models.CharField(default="initiated",choices=CHOICES,max_length=255)
-    method_of_collection = models.CharField(choices=COLLECTION_CHOICES,max_length=255,default="CASH")
+    method_of_collection = models.CharField(choices=COLLECTION_CHOICES,max_length=255,default="CASH",null=True,blank=True)
 
     def __str__(self):
         product_names = ', '.join([product.name for product in self.products.all()])
         return f"DropOff {self.id} - {product_names} to {self.store.name}"
+    
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        for product in self.products.all():
+            ProductActivityLog.objects.create(
+                product=product,
+             
+                details=f"Product {product.name} dropped off at {timezone.now().strftime('%Y-%m-%d %H:%M')} at {self.store.name} by Driver {self.driver.first_name}"
+            )
+
+
 
 
 class Return(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE,null=True, blank=True)
     driver = models.ForeignKey(Driver, on_delete=models.CASCADE)
     products = models.ManyToManyField(Product,related_name="returns")  # Change from ForeignKey to ManyToManyField
     store = models.ForeignKey(Store, on_delete=models.CASCADE)          
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE,null=True,blank=True)  
+    status = models.CharField(max_length=20, choices=[("initiated", "Initiated"), ("received", "Received")], default="initiated")
 
     def __str__(self):
         product_names = ', '.join([product.name for product in self.products.all()])
@@ -204,6 +245,12 @@ class Return(models.Model):
                 product.warehouse_id = warehouse_id  # Set the warehouse ID
                 product.driver = None  # Optionally remove the driver
                 product.save()
+    
+   
+
+
+
+
 
 
 # INVOICING BY ZATCA
